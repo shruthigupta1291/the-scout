@@ -2,6 +2,7 @@
 
 An automated job outreach agent built on n8n that finds Product Manager roles, extracts HR contact details, sends personalised emails using AI, logs everything to Google Sheets and sends you a daily report on WhatsApp and Email.
 
+Note : This is a PM case study and system design. Built as a personal productivity tool — code shared on request.
 ---
 
 ## What The Scout Does
