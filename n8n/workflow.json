@@ -1,0 +1,961 @@
+{
+  "name": "The Scout - PM Job Outreach Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 22
+            },
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        -64
+      ],
+      "id": "5bcf6526-447a-46df-8811-28a94cbb7985",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://jsearch.p.rapidapi.com/search?query=Product+Manager+in+Bangalore&page=1&num_pages=1&date_posted=week",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-RapidAPI-Host",
+              "value": "jsearch.p.rapidapi.com"
+            },
+            {
+              "name": "X-RapidAPI-Key",
+              "value": "<YOUR_RAPIDAPI_KEY>"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        -64
+      ],
+      "id": "9bd04923-4706-49ec-8545-40901bc63a82",
+      "name": "Search Linkedin Jobs"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        448,
+        -64
+      ],
+      "id": "f9789796-33f7-43a8-af57-8119a53d8932",
+      "name": "Split Jobs"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/<YOUR_GOOGLE_SHEET_ID>/edit?usp=sharing",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Job Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<YOUR_GOOGLE_SHEET_ID>/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        672,
+        -64
+      ],
+      "id": "5acad566-6d31-4aea-aab2-7a3e7a8436e8",
+      "name": "Duplicate Check",
+      "alwaysOutputData": true,
+      "retryOnFail": false,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "<YOUR_GOOGLE_SHEETS_CREDENTIAL_ID>",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7e4522c1-b6f7-4745-8e0b-fa3c4cd26459",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": "2 → 0",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        896,
+        -64
+      ],
+      "id": "27a9ef63-3f2d-44c2-ba40-44709d753a06",
+      "name": "Is Duplicate"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.job_apply_link }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": " Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        -160
+      ],
+      "id": "4f0c14b3-c5a6-4712-a8e2-b690899db024",
+      "name": "Scrape Job Details"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer <YOUR_GROQ_API_KEY>"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"max_tokens\": 500,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Extract contact info from this job at {{ $('Split Jobs').first().json.employer_name }} for role {{ $('Split Jobs').first().json.job_title }}. Return ONLY JSON with keys: email, apply_link, poster_name, poster_linkedin. If no email found return hr@{{ $('Split Jobs').first().json.employer_name }}.com\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        32
+      ],
+      "id": "6d336504-b9b9-4d58-af44-9fe8acd7c0ec",
+      "name": "Groq Cloud Extracts Contact"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst content = response.choices[0].message.content;\n\n// Clean up response and parse JSON\nconst cleaned = content.replace(/```json|```/g, '').trim();\nconst contact = JSON.parse(cleaned);\n\nreturn {\n  email: contact.email || null,\n  apply_link: contact.apply_link || null,\n  poster_name: contact.poster_name || null,\n  poster_linkedin: contact.poster_linkedin || null,\n  job_title: $('Split Jobs').first().json.job_title,\n  company: $('Split Jobs').first().json.employer_name,\n  job_url: $('Split Jobs').first().json.job_apply_link\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        32
+      ],
+      "id": "05e1cd2a-e8d8-4515-ae3b-bb9945c5a38b",
+      "name": "Parse Contact Info"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.email }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    },
+                    "id": "5410bed2-55b0-42d8-bc5d-b17dbc85125d"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Has Email"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "a4a0308b-e762-4b57-9f9f-d8ddb53937b8",
+                    "leftValue": "={{ $json.poster_linkedin }}",
+                    "rightValue": "linkedin.com/in/",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Has LinkedIn"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "3b77f93b-98d5-4220-a748-8f015b4e6113",
+                    "leftValue": "={{ $json.email }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "empty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Skip"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": ""
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "ab22bc0e-9eae-4326-aa46-0e5cf3340e3c",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer <YOUR_GROQ_API_KEY>"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a short professional email to a recruiter for a Product Manager role. Keep it under 150 words, warm and genuine. Do not use any placeholders like [Your Name]. Sign off as Shruthi. Company: {{ $json.company }}. Job Title: {{ $json.job_title }}. Recruiter Name: {{ $json.poster_name }}. Make it personalised and not generic.\"\n    }\n  ],\n  \"max_tokens\": 300\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2016,
+        -64
+      ],
+      "id": "30594e05-b123-4b8f-95ef-c9e41c1702c3",
+      "name": "Generate Email Message"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Parse Contact Info').first().json.email }}",
+        "subject": "Product Manager Opportunity — Shruthi N Gupta",
+        "emailType": "text",
+        "message": "={{ $('Generate Email Message').first().json.choices[0].message.content }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        -64
+      ],
+      "id": "59b1c4fb-a040-4940-9437-086cfd34b468",
+      "name": "Send Email to HR",
+      "webhookId": "48f1461c-a166-45e8-b978-5e29a08c65b4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "<YOUR_GMAIL_CREDENTIAL_ID>",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer <YOUR_GROQ_API_KEY>"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a short LinkedIn message to a recruiter for a Product Manager role. Keep it under 100 words, conversational and genuine. Do not use placeholders. Sign off as Shruthi. Company: {{ $json.company }}. Job Title: {{ $json.job_title }}. Recruiter Name: {{ $json.poster_name }}. Make it feel human and personalised.\"\n    }\n  ],\n  \"max_tokens\": 200\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        128
+      ],
+      "id": "7ee6fe0c-27a1-414c-8a17-33aeaf681e96",
+      "name": "Generate LinkedIn Message"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "<YOUR_GOOGLE_SHEET_ID>",
+          "mode": "list",
+          "cachedResultName": "The Scout — Job Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<YOUR_GOOGLE_SHEET_ID>/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Job Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<YOUR_GOOGLE_SHEET_ID>/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date ": "={{ $now }}",
+            "Company": "={{ $('Parse Contact Info').first().json.company }}",
+            "Job Title": "={{ $('Parse Contact Info').first().json.job_title }}",
+            "Job URL": "={{ $('Parse Contact Info').first().json.job_url }}",
+            "Poster Name": "={{ $('Parse Contact Info').first().json.poster_name }}",
+            "Contact Found": "={{ $('Parse Contact Info').first().json.email }}",
+            "Outreach Method": "Email",
+            "Message Sent": "= {{ $('Generate Email Message').first().json.choices[0].message.content }}",
+            "Status": "Sent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Date ",
+              "displayName": "Date ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job Title",
+              "displayName": "Job Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job URL",
+              "displayName": "Job URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Poster Name",
+              "displayName": "Poster Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Contact Found",
+              "displayName": "Contact Found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Outreach Method",
+              "displayName": "Outreach Method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Message Sent",
+              "displayName": "Message Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Notes",
+              "displayName": "Notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2464,
+        -64
+      ],
+      "id": "2fd10710-0921-448e-bfba-b43a858008b6",
+      "name": "Log to Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "<YOUR_GOOGLE_SHEETS_CREDENTIAL_ID>",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "<YOUR_GOOGLE_SHEET_ID>",
+          "mode": "list",
+          "cachedResultName": "The Scout — Job Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<YOUR_GOOGLE_SHEET_ID>/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Job Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<YOUR_GOOGLE_SHEET_ID>/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date ": "={{ $now }}",
+            "Company": "={{ $('Parse Contact Info').first().json.company }}",
+            "Job Title": "={{ $('Parse Contact Info').first().json.job_title }}",
+            "Job URL": "={{ $('Parse Contact Info').first().json.job_url }}",
+            "Poster Name": "={{ $('Parse Contact Info').first().json.poster_name }}",
+            "Contact Found": "={{ $('Parse Contact Info').first().json.poster_linkedin }}",
+            "Outreach Method": "LinkedIn DM",
+            "Message Sent": "={{ $('Generate LinkedIn Message').first().json.choices[0].message.content }}",
+            "Status": "Sent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Date ",
+              "displayName": "Date ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job Title",
+              "displayName": "Job Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job URL",
+              "displayName": "Job URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Poster Name",
+              "displayName": "Poster Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Contact Found",
+              "displayName": "Contact Found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Outreach Method",
+              "displayName": "Outreach Method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Message Sent",
+              "displayName": "Message Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Notes",
+              "displayName": "Notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2016,
+        128
+      ],
+      "id": "0ac4e64f-57ee-4645-9880-334c64e0e139",
+      "name": "Log LinkedIn to Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "<YOUR_GOOGLE_SHEETS_CREDENTIAL_ID>",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst totalSent = items.length;\nconst emails = items.filter(item => \n  item.json['Outreach Method'] === 'Email'\n).length;\nconst linkedIn = items.filter(item => \n  item.json['Outreach Method'] === 'LinkedIn DM'\n).length;\n\nconst companies = items\n  .map(item => item.json['Company'])\n  .filter(Boolean)\n  .join('\\n');\n\nconst report = `\n📊 The Scout — Daily Report\n📅 Date: ${new Date().toDateString()}\n\n✅ Total HRs Contacted: ${totalSent}\n📧 Emails Sent: ${emails}\n💬 LinkedIn DMs: ${linkedIn}\n\n🏢 Companies Contacted:\n${companies}\n`;\n\nreturn { report };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        -64
+      ],
+      "id": "5ac4d251-2b98-4990-b056-1f55f9c0dab6",
+      "name": "Build Daily Report"
+    },
+    {
+      "parameters": {
+        "sendTo": "<YOUR_GMAIL>",
+        "subject": "=📊 The Scout — Daily Report {{ $now.toFormat('dd MMM yyyy') }}",
+        "emailType": "text",
+        "message": "={{ $json.report }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2912,
+        -64
+      ],
+      "id": "b6834b62-3fbf-4a8c-b63f-2792f4b8a122",
+      "name": "Send Email Report",
+      "webhookId": "37f71d22-b19c-4897-b30d-728d68b23bee",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "<YOUR_GMAIL_CREDENTIAL_ID>",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "+14155238886",
+        "to": "<YOUR_WHATSAPP_NUMBER>",
+        "toWhatsapp": true,
+        "message": "={{ $('Build Daily Report').first().json.report }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        3136,
+        -64
+      ],
+      "id": "98b0d0f6-ea91-45af-814f-8026752651a2",
+      "name": "Send WhatsApp Report",
+      "credentials": {
+        "twilioApi": {
+          "id": "<YOUR_TWILIO_CREDENTIAL_ID>",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        -64
+      ],
+      "id": "9ac6e837-8dac-4e0e-8921-ad54f4f85aab",
+      "name": "Rate Limit Delay",
+      "webhookId": "8c9c9a24-fcf3-4ca9-a86d-b154f64810d2"
+    },
+    {
+      "parameters": {
+        "amount": 60
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        928,
+        192
+      ],
+      "id": "34cf1fbd-1e6f-4861-96b8-f28c43442cb8",
+      "name": "groq rate limit",
+      "webhookId": "7be29eb9-8612-4c26-a0e0-58e523286506"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Search Linkedin Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Linkedin Jobs": {
+      "main": [
+        [
+          {
+            "node": "Split Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Jobs": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Check": {
+      "main": [
+        [
+          {
+            "node": "Is Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Scrape Job Details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "groq rate limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Cloud Extracts Contact": {
+      "main": [
+        [
+          {
+            "node": "Parse Contact Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Contact Info": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate LinkedIn Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Generate Email Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email to HR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email to HR": {
+      "main": [
+        [
+          {
+            "node": "Log to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate LinkedIn Message": {
+      "main": [
+        [
+          {
+            "node": "Log LinkedIn to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Build Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Daily Report": {
+      "main": [
+        [
+          {
+            "node": "Send Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Report": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Delay": {
+      "main": [
+        [
+          {
+            "node": "Generate Email Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "groq rate limit": {
+      "main": [
+        [
+          {
+            "node": "Groq Cloud Extracts Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "81a980be-72c1-4ed3-b4f8-051c6bd886a3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0f8ee3aa296901ba7e7dc3374b534301266264bb39d51ac72b26a6cde4a7e3c8"
+  },
+  "id": "7TQl8rZcBCLxxPs9",
+  "tags": []
+}

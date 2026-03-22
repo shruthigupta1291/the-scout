@@ -1,0 +1,23 @@
+# Environment variables — never commit these!
+.env
+
+# n8n local data
+.n8n/
+
+# Mac system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Node modules
+node_modules/
+npm-debug.log*
+
+# Logs
+*.log
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo

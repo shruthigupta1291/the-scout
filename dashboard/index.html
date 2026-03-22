@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Scout — Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f7; color: #1d1d1f; padding: 2rem; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 12px; }
+    .title { font-size: 24px; font-weight: 600; }
+    .sub { font-size: 14px; color: #666; margin-top: 4px; }
+    .live-badge { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #1a7f4b; background: #d4f5e4; border: 1px solid #a3e4c1; border-radius: 20px; padding: 6px 14px; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #1a7f4b; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-bottom: 2rem; }
+    .metric { background: white; border-radius: 12px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .metric-label { font-size: 13px; color: #666; margin-bottom: 8px; }
+    .metric-value { font-size: 32px; font-weight: 600; color: #1d1d1f; line-height: 1; }
+    .metric-sub { font-size: 12px; color: #999; margin-top: 6px; }
+    .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 2rem; }
+    @media(max-width:700px){ .charts-row { grid-template-columns: 1fr; } }
+    .card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .card-title { font-size: 14px; font-weight: 600; color: #666; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .legend { display: flex; gap: 16px; margin-bottom: 12px; font-size: 13px; color: #666; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; font-size: 12px; font-weight: 600; color: #999; padding: 0 12px 12px 0; border-bottom: 1px solid #f0f0f0; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 12px 12px 12px 0; border-bottom: 1px solid #f5f5f5; color: #1d1d1f; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    .badge { display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 20px; font-weight: 500; }
+    .badge-sent { background: #d4f5e4; color: #1a7f4b; }
+    .badge-manual { background: #fff3cd; color: #856404; }
+    .badge-skip { background: #f0f0f0; color: #666; }
+    .method-email { color: #185FA5; font-weight: 500; }
+    .method-linkedin { color: #0F6E56; font-weight: 500; }
+    .refresh-btn { padding: 8px 16px; border-radius: 8px; border: 1px solid #ddd; background: white; cursor: pointer; font-size: 13px; color: #666; }
+    .refresh-btn:hover { background: #f5f5f7; }
+    .loading { text-align: center; padding: 4rem; color: #999; font-size: 15px; }
+    .error { text-align: center; padding: 2rem; color: #d32f2f; background: #ffebee; border-radius: 12px; }
+    .empty { text-align: center; padding: 4rem; color: #999; }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .next-run { display: flex; align-items: center; justify-content: space-between; background: white; border-radius: 12px; padding: 14px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-top: 1rem; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="title">🦅 The Scout</div>
+    <div class="sub">PM Job Outreach — Live Dashboard</div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <button class="refresh-btn" onclick="loadData()">Refresh</button>
+    <div class="live-badge"><div class="live-dot"></div>Live · Google Sheets</div>
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="loading">Connecting to Google Sheets...</div>
+</div>
+
+<script>
+  // ==========================================
+  // CONFIGURATION
+  // Replace with your Apps Script Web App URL
+  // ==========================================
+  const API_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
+  // ==========================================
+
+  let trendChart = null;
+  let splitChart = null;
+
+  function loadData() {
+    document.getElementById('dashboard').innerHTML = '<div class="loading">Fetching live data...</div>';
+    const cbName = 'scoutCb_' + Date.now();
+    window[cbName] = function(data) {
+      delete window[cbName];
+      const s = document.getElementById('jsonp');
+      if (s) s.remove();
+      if (!Array.isArray(data) || data.length === 0) {
+        renderEmpty();
+        return;
+      }
+      renderDashboard(data);
+    };
+    const script = document.createElement('script');
+    script.id = 'jsonp';
+    script.onerror = () => {
+      document.getElementById('dashboard').innerHTML = '<div class="error">Could not connect. Check your Apps Script URL in index.html.</div>';
+    };
+    script.src = API_URL + '?callback=' + cbName;
+    document.head.appendChild(script);
+    setTimeout(() => {
+      if (window[cbName]) {
+        delete window[cbName];
+        document.getElementById('dashboard').innerHTML = '<div class="error">Request timed out. Click Refresh to try again.</div>';
+      }
+    }, 10000);
+  }
+
+  function renderEmpty() {
+    document.getElementById('dashboard').innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🦅</div>
+        <div style="font-weight:600;font-size:16px;margin-bottom:8px;">The Scout hasn't run yet</div>
+        <div>Your dashboard will populate when The Scout runs tonight!</div>
+      </div>`;
+  }
+
+  function fmt(d) {
+    if (!d) return '-';
+    const s = d.toString();
+    if (s.includes('T')) return s.slice(0, 10);
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  }
+
+  function renderDashboard(data) {
+    const total = data.length;
+    const emails = data.filter(d => d.method && d.method.toLowerCase().includes('email')).length;
+    const linkedin = data.filter(d => d.method && d.method.toLowerCase().includes('linkedin')).length;
+    const skipped = data.filter(d => d.status && d.status.toLowerCase().includes('skip')).length;
+    const sent = data.filter(d => d.status && d.status.toLowerCase().includes('sent')).length;
+    const companies = [...new Set(data.map(d => d.company).filter(Boolean))].length;
+
+    const eByD = {}, lByD = {};
+    data.forEach(d => {
+      const date = fmt(d.date);
+      if (d.method && d.method.toLowerCase().includes('email')) eByD[date] = (eByD[date] || 0) + 1;
+      if (d.method && d.method.toLowerCase().includes('linkedin')) lByD[date] = (lByD[date] || 0) + 1;
+    });
+    const dates = [...new Set([...Object.keys(eByD), ...Object.keys(lByD)])].sort().slice(-7);
+    const recentRows = [...data].reverse().slice(0, 15);
+
+    document.getElementById('dashboard').innerHTML = `
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">Total contacted</div><div class="metric-value">${total}</div><div class="metric-sub">All time</div></div>
+        <div class="metric"><div class="metric-label">Emails sent</div><div class="metric-value">${emails}</div><div class="metric-sub">Auto-sent by Scout</div></div>
+        <div class="metric"><div class="metric-label">LinkedIn DMs</div><div class="metric-value">${linkedin}</div><div class="metric-sub">Ready to send manually</div></div>
+        <div class="metric"><div class="metric-label">Companies</div><div class="metric-value">${companies}</div><div class="metric-sub">Unique companies</div></div>
+        <div class="metric"><div class="metric-label">Sent successfully</div><div class="metric-value">${sent}</div><div class="metric-sub">Confirmed</div></div>
+      </div>
+
+      <div class="charts-row">
+        <div class="card">
+          <div class="card-title">Daily outreach trend</div>
+          <div class="legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#378ADD"></span>Emails</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#1D9E75"></span>LinkedIn</span>
+          </div>
+          <div style="position:relative;height:220px;"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Method split</div>
+          <div class="legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#378ADD"></span>Email ${emails}</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#1D9E75"></span>LinkedIn ${linkedin}</span>
+          </div>
+          <div style="position:relative;height:220px;"><canvas id="splitChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Applications log — ${total} total</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Company</th>
+              <th>Role</th>
+              <th>Contact</th>
+              <th>Method</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${recentRows.map(r => `
+              <tr>
+                <td>${fmt(r.date)}</td>
+                <td><strong>${r.company || '-'}</strong></td>
+                <td style="color:#666">${r.jobTitle || '-'}</td>
+                <td style="color:#999;font-size:12px">${r.contact || '-'}</td>
+                <td class="${r.method && r.method.toLowerCase().includes('linkedin') ? 'method-linkedin' : 'method-email'}">${r.method || '-'}</td>
+                <td><span class="badge ${r.status && r.status.toLowerCase().includes('sent') ? 'badge-sent' : r.status && r.status.toLowerCase().includes('manual') ? 'badge-manual' : 'badge-skip'}">${r.status || '-'}</span></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="next-run">
+        <span style="color:#666">Next run scheduled</span>
+        <span style="font-weight:600">Tonight · 10:00 PM IST</span>
+      </div>`;
+
+    if (trendChart) trendChart.destroy();
+    if (splitChart) splitChart.destroy();
+
+    trendChart = new Chart(document.getElementById('trendChart'), {
+      type: 'line',
+      data: {
+        labels: dates.length ? dates : ['Today'],
+        datasets: [
+          { label: 'Emails', data: dates.map(d => eByD[d] || 0), borderColor: '#378ADD', backgroundColor: 'rgba(55,138,221,0.1)', borderWidth: 2, pointRadius: 4, fill: true, tension: 0.4 },
+          { label: 'LinkedIn', data: dates.map(d => lByD[d] || 0), borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.1)', borderWidth: 2, pointRadius: 4, fill: true, tension: 0.4 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#999', font: { size: 11 }, maxRotation: 45, autoSkip: false } },
+          y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#999', font: { size: 11 }, stepSize: 1 }, beginAtZero: true }
+        }
+      }
+    });
+
+    splitChart = new Chart(document.getElementById('splitChart'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Email', 'LinkedIn'],
+        datasets: [{ data: [emails || 1, linkedin || 0], backgroundColor: ['#378ADD', '#1D9E75'], borderWidth: 0, hoverOffset: 6 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { display: false } } }
+    });
+  }
+
+  loadData();
+</script>
+</body>
+</html>
