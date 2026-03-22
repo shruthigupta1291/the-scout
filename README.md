@@ -19,6 +19,9 @@ Every day at your scheduled time, The Scout:
 8. Sends you a WhatsApp + Email daily report
 
 ---
+## Workflow Structure 
+
+<img width="1378" height="532" alt="Screenshot 2026-03-22 at 1 06 29 PM" src="https://github.com/user-attachments/assets/7ef04dd3-9557-4a88-a17b-00534cdf6640" />
 
 ## Architecture
 
