@@ -1,4 +1,8 @@
-# 🦅 The Scout — PM Job Outreach Agent
+<p align="center">
+  <img src="docs/scout-logo.png" width="200" alt="The Scout Logo"/>
+</p>
+
+# The Scout — PM Job Outreach Agent
 
 An automated job outreach agent built on n8n that finds Product Manager roles, extracts HR contact details, sends personalised emails using AI, logs everything to Google Sheets and sends you a daily report on WhatsApp and Email.
 
