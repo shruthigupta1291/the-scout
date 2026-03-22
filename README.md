@@ -128,7 +128,7 @@ the-scout/
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/the-scout.git
+git clone https://github.com/shruthigupta1291/the-scout.git
 cd the-scout
 
 # Run setup script
